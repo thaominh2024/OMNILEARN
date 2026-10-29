@@ -1,0 +1,21 @@
+# Credentials / environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+# Generated content
+outputs/
+runs/
+*.faiss
+embeddings.*.npy
+# Local documents
+*.pdf
+!examples/*.md
+.DS_Store

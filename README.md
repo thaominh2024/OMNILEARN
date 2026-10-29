@@ -1,126 +1,98 @@
-# OMNILEARN
-- Ever got frustrated when revising a chat history with LLM, the whole follow-ups got disappeared? 
+# PDF-to-Story Generation — AI Pipeline Portfolio
 
-- Ever tried to merge different threads with LLM into to one, so you copy-pasted all chats into a new chat to have better context?
+A focused extraction of the **PDF-to-Story** functionality from the collaborative **OMILEARNING1** project. This is a portfolio-oriented subset, not a claim of sole authorship of the original application. Adjust the personal-contributions section below to match actual authorship before publishing.
 
-- Ever wondered "what if I can have multiple response with different input, and compare them", but bothered that the current chat interface is too linear?
+## What the code currently does
 
-Try out Gitchat! It loosly applies the git concept - you can merge, branch and modify the chat history. By treating messages as interconnected nodes in a flowchart-like structure. 
+```text
+PDF document
+  -> PyMuPDF text extraction
+  -> character/word chunking
+  -> SentenceTransformer embeddings (optional ONNX encoder)
+  -> FAISS index saved to disk
+  -> MMR representative excerpt selection
+  -> LLM-assisted learning unit/topic proposal
+  -> separate FastAPI story endpoint receives ONE unit title
+  -> LLM-generated Vietnamese short story
+```
 
-It offers unprecedented flexibility in Large Language Model (LLM) interactions, allowing users to create branches, merge conversations, and rewire chat histories.
+**Important limitation:** The original story endpoint receives only `unit` and `style`. It does **not** retrieve or receive relevant PDF passages. Therefore the generated story is *topic-based*, not source-grounded RAG. The FAISS index is saved but is not queried by the current story service.
 
+## Repository structure
 
+```text
+PDF-to-Story-Generation/
+├── src/
+│   ├── pipeline.py          # Original PDF -> learning units pipeline
+│   └── story/app.py         # Original story FastAPI service (credential removed)
+├── run_demo.py              # Standalone CLI coordinator added for portfolio
+├── docs/architecture.md    # Detailed data flow and limitations
+├── examples/README.md      # Instructions for non-copyrighted demo inputs
+├── requirements.txt
+├── .env.example
+└── .gitignore
+```
 
-https://github.com/user-attachments/assets/f4d123f3-4b2d-4c8d-94b2-034a1acaa00d
+## Installation
 
+Python 3.10+ recommended (actual environment compatibility depends on installed ML packages).
 
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
 
+Set `OPENAI_API_KEY` in your terminal environment. `.env.example` is a template, **not auto-loaded** by these scripts. Do not commit real keys. If the key is absent, topic generation falls back to heuristic titles and the story API returns clearly marked FAKE demo text.
 
-## Features
+## Quickstart
 
-1. **Non-linear Conversation Presentation**
-   - Visualize conversations as nodes and edges in a flowchart structure
-   - Easily manage and manipulate conversation context
+First terminal — story service:
 
-2. **Context Replication**
-   - Create new conversation branches by replicating existing nodes
-   - Avoid the need to copy/paste entire conversations as in traditional LLM interfaces
+```bash
+uvicorn src.story.app:app --host 127.0.0.1 --port 8006
+```
 
-3. **Flexible Context Management**
-   - Route or unroute different conversation branches when creating new chats
-   - Easily control the context provided to the LLM for each interaction
+Second terminal — create topics and stories:
 
-4. **Editable Conversation History**
-   - Delete or modify LLM responses and user inputs
-   - Regenerate responses based on edited content
+```bash
+python run_demo.py --pdf path/to/your.pdf --out-dir outputs/demo --generate-stories
+```
 
-5. **Cascade-style Response Regeneration**
-   - Automatically regenerate all child LLM responses when modifying an earlier user input
-   - Maintain conversation coherence without resetting the entire thread
+To generate topics without launching the story server:
 
-6. **Interactive Node Management**
-   - Add new user input or LLM response nodes
-   - Connect nodes to create new conversation flows
+```bash
+python run_demo.py --pdf path/to/your.pdf --out-dir outputs/demo
+```
 
-7. **Context Menu Operations**
-   - Replicate nodes to create parallel conversation branches
-   - Create connected nodes to extend conversations
+The initial embedding model may download model weights. The code stores artifacts in `outputs/` (ignored by Git). No user PDFs are bundled.
 
-8. **Responsive Layout**
-   - Zoom and pan functionality for easy navigation
-   - Minimap for an overview of the conversation structure
+## API
 
-## Getting Started
+`POST http://127.0.0.1:8006/story`
 
-### Prerequisites
+```json
+{"unit": "Gradient Descent", "style": "ngắn gọn, dễ hiểu"}
+```
 
-- Node.js (version 14 or later)
-- npm (usually comes with Node.js)
+Response: `{"text": "..."}`. Health check: `GET /health`.
 
-### Installation
+## My contribution / Attribution
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/DrustZ/GitChat
-   ```
+**Original project:** [OMILEARNING1](https://github.com/thaominh2024/OMILEARNING1) (collaborative project).
 
-2. Navigate to the project directory:
-   ```
-   cd GitChat
-   ```
+**Personal scope:** PDF extraction -> learning unit generation -> story generation integration **[EDIT THIS TO MATCH YOUR ACTUAL WORK]**. The source files in `src/` are copied from the team repository with removal of a hard-coded credential. `run_demo.py`, documentation and packaging were added for this standalone presentation. Credit other contributors and confirm permission/license before publishing any team-owned code.
 
-3. For the webapp, install dependencies:
-   ```
-   cd nodechat
-   npm install
-   ```
+## Caveats / Next steps
 
-4. Start the webapp:
-   ```
-   npm start
-   ```
+- Text-layer PDFs only; scanned/image-only PDFs need OCR.
+- The saved FAISS index is not connected to story generation.
+- Add per-unit retrieval and citations for grounded stories.
+- Add end-to-end integration tests and sample PDFs with reuse rights.
+- Confirm package versions in your actual deployment environment.
+- Rotate/revoke any API key previously exposed in a public repository or shared ZIP; removing it from this subset does not invalidate it.
 
-5. Do it again for the server (remember to create a .env for your openai key `OPENAI_API_KEY = `):
-   ```
-   cd server
-   npm install
-   npm start
-   ```
+## Validation status
 
-5. Open your browser and visit `http://localhost:3000` to see the application.
-
-## Usage
-
-1. **Adding Nodes**: 
-   - Click the "Add User Input" or "Add LLM Response" buttons to create new nodes.
-   - Type your message in the input field at the bottom and click "Send" to add a new user input followed by an LLM response.
-
-2. **Editing Nodes**: 
-   - Double-click on a node to edit its content.
-
-3. **Creating Connections**: 
-   - Drag from the bottom handle of one node to the top handle of another to create a connection.
-
-4. **Replicating Nodes**: 
-   - Right-click on a node and select "Replicate Node" from the context menu.
-
-5. **Creating Connected Nodes**: 
-   - Right-click on a node and select "Create Connected Node" to add a new node connected to the selected one.
-
-6. **Deleting Connections**: 
-   - Click on a connection to delete it.
-
-7. **Regenerating Responses**: 
-   - Edit a user input node and all subsequent LLM response nodes will automatically regenerate.
-
-8. **Navigation**: 
-   - Use the mouse wheel to zoom in and out.
-   - Click and drag on the background to pan the view.
-   - Use the minimap in the top-right corner for quick navigation.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Acknowledgments
-- Non-linear chat idea inspired by the [Sensecape](https://dl.acm.org/doi/10.1145/3586183.3606756) project. Check out their [video](https://www.youtube.com/watch?v=MIfhunAwZew)!
+Files were checked for Python syntax and packaged. A full run of PyMuPDF, model downloads, OpenAI requests, and the service integration was **not executed** during packaging.
