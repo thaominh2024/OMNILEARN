@@ -1,0 +1,188 @@
+version: "3.9"
+
+services:
+  # =============== Storage ===============
+
+  postgres:
+    image: postgres:15
+    container_name: pg-llm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${PGPORT}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console UI
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    command: |
+      set -e
+      mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+      mc mb --ignore-existing local/$${MINIO_BUCKET}
+      mc anonymous set none local/$${MINIO_BUCKET}
+      echo "[minio-init] Bucket '$${MINIO_BUCKET}' ready."
+    restart: "no"
+
+  # =============== Backends ===============
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: be-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      # server.js cần các env này
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+
+      # PG client (đi theo service name)
+      PGHOST: ${PGHOST}
+      PGPORT: 5432
+      PGDATABASE: ${PGDATABASE}
+      PGUSER: ${PGUSER}
+      PGPASSWORD: ${PGPASSWORD}
+
+      # MinIO
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+
+      # Python pipeline locale (nếu cần)
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app:rw
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  qa:
+    build:
+      context: ./services/qa
+      dockerfile: Dockerfile
+    container_name: svc-qa
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # nguồn dữ liệu
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    ports:
+      - "8003:8003"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8003/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  review:
+    build:
+      context: ./services/review
+      dockerfile: Dockerfile
+    container_name: svc-review
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8004/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  video-search:
+    build:
+      context: ./services/video-search
+      dockerfile: Dockerfile
+    container_name: svc-video-search
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  video-segments:
+    build:
+      context: ./services/video-segments
+      dockerfile: Dockerfile
+    container_name: svc-video-segments
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pg-data:
+  minio-data:
